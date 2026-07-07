@@ -78,6 +78,26 @@ def get_prompt(row_id):
     return jsonify({"prompt": text})
 
 
+EDITABLE_FIELDS = {
+    "name", "seo_title", "h1", "meta_description", "primary_keyword",
+    "secondary_keywords", "lsi_keywords", "faq_questions", "notes",
+}
+
+
+@app.route("/update/<int:row_id>", methods=["POST"])
+def update_field(row_id):
+    data = request.get_json(silent=True) or {}
+    field = data.get("field", "")
+    value = data.get("value", "")
+    if field not in EDITABLE_FIELDS:
+        return jsonify({"error": f"field '{field}' is not editable"}), 400
+    conn = get_conn()
+    conn.execute(f"UPDATE rows_ SET {field}=? WHERE id=?", (value, row_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "field": field})
+
+
 @app.route("/mark/<int:row_id>", methods=["POST"])
 def mark_row(row_id):
     status = request.form.get("applied", "Yes")

@@ -12,18 +12,26 @@
   .stat-card b { font-size: 16px; }
   .toolbar { display: flex; gap: 10px; padding: 0 24px 12px; flex-wrap: wrap; align-items: center; }
   .toolbar select, .toolbar input { padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; }
-  table { width: 100%; border-collapse: collapse; background: #fff; }
-  th, td { padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 13px; text-align: left; vertical-align: top; }
-  th { background: #eef2f6; position: sticky; top: 0; }
+  .table-wrap { overflow-x: auto; padding: 0 24px 24px; }
+  table { border-collapse: collapse; background: #fff; min-width: 1800px; }
+  th, td { padding: 6px 8px; border: 1px solid #eee; font-size: 12px; text-align: left; vertical-align: top; }
+  th { background: #eef2f6; position: sticky; top: 0; z-index: 1; white-space: nowrap; }
   tr.applied-yes { background: #eaf5ea; }
   tr.applied-skipped { background: #f0f0f0; color: #888; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; white-space: nowrap; }
   .badge-commerce_en { background: #dbe8fb; color: #1a4a8a; }
   .badge-b2b_ru { background: #f8e3d3; color: #8a4a1a; }
   .badge-personal_ru { background: #f3d9e6; color: #8a1a55; }
-  button.prompt-btn { background: #1F4E78; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  button.prompt-btn { background: #1F4E78; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; white-space: nowrap; }
   button.prompt-btn:hover { background: #163a5a; }
   select.status-select { font-size: 12px; padding: 3px; }
+  .editable { min-width: 160px; max-width: 260px; max-height: 90px; overflow-y: auto; outline: none; cursor: text; }
+  .editable:hover { background: #fffbe6; }
+  .editable:focus { background: #fff; box-shadow: inset 0 0 0 2px #1F4E78; }
+  .editable.saved { background: #d9f2d9 !important; transition: background 0.6s; }
+  .editable.error { background: #f8d0d0 !important; }
+  .name-cell { max-width: 220px; }
+  .url-cell { max-width: 160px; font-size: 11px; color: #777; word-break: break-all; }
   #modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); align-items:center; justify-content:center; z-index:100; }
   #modal { background:#fff; border-radius:10px; padding:20px; width:min(720px,90vw); max-height:80vh; overflow:auto; }
   #modal textarea { width:100%; height:320px; font-family: monospace; font-size: 12px; }
@@ -31,8 +39,6 @@
   #modal button { padding: 8px 14px; border-radius:6px; border:none; cursor:pointer; }
   #copy-btn { background:#1F4E78; color:#fff; }
   #close-btn { background:#ddd; }
-  .name-cell { max-width: 280px; }
-  .kw-cell { max-width: 220px; font-size: 11px; color: #555; }
 </style>
 </head>
 <body>
@@ -65,29 +71,41 @@
 </form>
 
 <div class="toolbar">
-  <form method="post" action="/reimport" onsubmit="return confirm('Перечитать xlsx из import_data/? Прогресс (Applied?) сохранится по URL/названию.');">
+  <form method="post" action="/reimport" onsubmit="return confirm('Перечитать xlsx из import_data/? Прогресс (Applied?, правки полей) сохранится по URL/названию.');">
     <button type="submit">Обновить данные из xlsx</button>
   </form>
   {% for s in sites %}
   <a href="/export/{{ s.slug }}"><button type="button">Экспорт {{ s.slug }}.xlsx</button></a>
   {% endfor %}
+  <span style="font-size:12px;color:#666">Клик по любому текстовому полю — редактирование, сохраняется автоматически при клике вне поля</span>
 </div>
 
+<div class="table-wrap">
 <table>
 <thead>
 <tr>
-  <th>Сайт</th><th>Раздел</th><th>Название / страница</th><th>Тип</th>
-  <th>Primary keyword</th><th>Статус</th><th>Действия</th>
+  <th>Сайт</th><th>Раздел</th><th>Название</th><th>URL</th><th>Тип</th>
+  <th>SEO Title</th><th>H1</th><th>Meta Description</th>
+  <th>Primary keyword</th><th>Secondary keywords</th><th>LSI keywords</th><th>FAQ</th>
+  <th>Notes</th><th>Статус</th><th>Действия</th>
 </tr>
 </thead>
 <tbody>
 {% for r in rows %}
-<tr class="{% if r.applied=='Yes' %}applied-yes{% elif r.applied=='Skipped' %}applied-skipped{% endif %}">
+<tr id="row-{{ r.id }}" class="{% if r.applied=='Yes' %}applied-yes{% elif r.applied=='Skipped' %}applied-skipped{% endif %}">
   <td><span class="badge badge-{{ r.prompt_style }}">{{ r.site_name }}</span></td>
   <td>{{ r.sheet }}</td>
-  <td class="name-cell">{{ r.name }}</td>
+  <td class="editable name-cell" contenteditable="true" data-row="{{ r.id }}" data-field="name">{{ r.name }}</td>
+  <td class="url-cell">{{ r.url or '—' }}</td>
   <td>{{ r.row_type }}</td>
-  <td class="kw-cell">{{ r.primary_keyword }}</td>
+  <td class="editable" contenteditable="true" data-row="{{ r.id }}" data-field="seo_title">{{ r.seo_title }}</td>
+  <td class="editable" contenteditable="true" data-row="{{ r.id }}" data-field="h1">{{ r.h1 }}</td>
+  <td class="editable" contenteditable="true" data-row="{{ r.id }}" data-field="meta_description">{{ r.meta_description }}</td>
+  <td class="editable" contenteditable="true" data-row="{{ r.id }}" data-field="primary_keyword">{{ r.primary_keyword }}</td>
+  <td class="editable" contenteditable="true" data-row="{{ r.id }}" data-field="secondary_keywords">{{ r.secondary_keywords }}</td>
+  <td class="editable" contenteditable="true" data-row="{{ r.id }}" data-field="lsi_keywords">{{ r.lsi_keywords }}</td>
+  <td class="editable" contenteditable="true" data-row="{{ r.id }}" data-field="faq_questions">{{ r.faq_questions }}</td>
+  <td class="editable" contenteditable="true" data-row="{{ r.id }}" data-field="notes">{{ r.notes }}</td>
   <td>
     <form method="post" action="{{ url_for('mark_row', row_id=r.id) }}" style="display:inline">
       <select name="applied" class="status-select" onchange="this.form.submit()">
@@ -102,6 +120,7 @@
 {% endfor %}
 </tbody>
 </table>
+</div>
 
 <div id="modal-overlay">
   <div id="modal">
@@ -127,6 +146,39 @@ function copyPrompt() {
   ta.select();
   document.execCommand('copy');
 }
+
+// Автосохранение редактируемых ячеек при потере фокуса
+document.querySelectorAll('.editable').forEach(cell => {
+  let original = cell.textContent;
+  cell.addEventListener('focus', () => { original = cell.textContent; });
+  cell.addEventListener('blur', async () => {
+    const value = cell.textContent;
+    if (value === original) return;
+    const rowId = cell.dataset.row;
+    const field = cell.dataset.field;
+    try {
+      const res = await fetch('/update/' + rowId, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({field, value})
+      });
+      if (!res.ok) throw new Error('bad response');
+      cell.classList.remove('error');
+      cell.classList.add('saved');
+      setTimeout(() => cell.classList.remove('saved'), 700);
+    } catch (e) {
+      cell.classList.add('error');
+      alert('Не удалось сохранить поле "' + field + '". Проверьте соединение и попробуйте снова.');
+    }
+  });
+  // Enter = уйти из поля (сохранить), Shift+Enter = перенос строки
+  cell.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      cell.blur();
+    }
+  });
+});
 </script>
 </body>
 </html>
