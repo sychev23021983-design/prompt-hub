@@ -5,7 +5,7 @@ from datetime import date
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 
 from db import get_conn, init_db
-from prompts import generate_prompt
+from prompts import generate_prompt, get_related_rows
 
 app = Flask(__name__)
 
@@ -69,10 +69,12 @@ def get_prompt(row_id):
     conn = get_conn()
     row = conn.execute("""SELECT r.*, s.prompt_style FROM rows_ r
                            JOIN sites s ON s.id = r.site_id WHERE r.id=?""", (row_id,)).fetchone()
-    conn.close()
     if not row:
+        conn.close()
         return jsonify({"error": "not found"}), 404
-    text = generate_prompt(row, row["prompt_style"])
+    related = get_related_rows(conn, row)
+    conn.close()
+    text = generate_prompt(row, row["prompt_style"], related)
     return jsonify({"prompt": text})
 
 
@@ -124,4 +126,4 @@ def reimport():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8030)), debug=False)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8040)), debug=False)
