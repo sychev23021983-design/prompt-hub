@@ -1,0 +1,15 @@
+services:
+  prompt-hub:
+    build: .
+    container_name: prompt-hub
+    restart: unless-stopped
+    ports:
+      - "8030:8030"
+    volumes:
+      - ./app:/app                      # код + шаблоны — правки видны без пересборки
+      - ./data:/app/data                # SQLite база (переживает пересоздание контейнера)
+      - ./import_data:/app/import_data  # исходные xlsx для (пере)импорта
+    environment:
+      - PROMPT_HUB_DB=/app/data/prompt_hub.db
+      - PROMPT_HUB_IMPORT_DIR=/app/import_data
+    command: gunicorn --bind 0.0.0.0:8030 --workers 2 --chdir /app server:app
