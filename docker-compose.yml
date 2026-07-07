@@ -4,7 +4,7 @@ services:
     container_name: prompt-hub
     restart: unless-stopped
     ports:
-      - "8030:8030"
+      - "8040:8040"
     volumes:
       - ./app:/app                      # код + шаблоны — правки видны без пересборки
       - ./data:/app/data                # SQLite база (переживает пересоздание контейнера)
@@ -12,4 +12,4 @@ services:
     environment:
       - PROMPT_HUB_DB=/app/data/prompt_hub.db
       - PROMPT_HUB_IMPORT_DIR=/app/import_data
-    command: gunicorn --bind 0.0.0.0:8030 --workers 2 --chdir /app server:app
+    command: gunicorn --bind 0.0.0.0:8040 --workers 2 --chdir /app server:app
