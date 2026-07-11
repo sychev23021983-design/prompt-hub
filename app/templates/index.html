@@ -79,6 +79,7 @@
   {% else %}
   <span style="font-size:12px;color:#888">Выберите сайт, чтобы открыть его структуру</span>
   {% endif %}
+  <a href="/prompt-templates"><button type="button">🧩 Промпт-шаблоны</button></a>
 </form>
 
 <div class="toolbar">
@@ -95,7 +96,7 @@
 <table>
 <thead>
 <tr>
-  <th>Сайт</th><th>Раздел</th><th>Структура</th><th>Название</th><th>URL</th><th>Тип</th>
+  <th>Сайт</th><th>Раздел</th><th>Структура</th><th>Тип страницы</th><th>Название</th><th>URL</th><th>Тип</th>
   <th>SEO Title</th><th>H1</th><th>Meta Description</th>
   <th>Primary keyword</th><th>Secondary keywords</th><th>LSI keywords</th><th>FAQ</th>
   <th>Notes</th><th>Статус</th><th>Действия</th>
@@ -116,6 +117,14 @@
     {% if r.structure_node_id %}
     <div class="breadcrumb">{{ breadcrumbs.get(r.structure_node_id, '') }}</div>
     {% endif %}
+  </td>
+  <td class="structure-cell">
+    <select class="structure-select" data-row="{{ r.id }}" onchange="updatePageType({{ r.id }}, this.value)">
+      <option value="">— не указан —</option>
+      {% for code, label in page_types %}
+      <option value="{{ code }}" {% if r.page_type==code %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
   </td>
   <td class="editable name-cell" contenteditable="true" data-row="{{ r.id }}" data-field="name">{{ r.name }}</td>
   <td class="url-wrap">
@@ -170,6 +179,19 @@ function copyPrompt() {
   const ta = document.getElementById('prompt-text');
   ta.select();
   document.execCommand('copy');
+}
+
+async function updatePageType(rowId, value) {
+  try {
+    const res = await fetch('/update/' + rowId, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({field: 'page_type', value})
+    });
+    if (!res.ok) throw new Error('bad response');
+  } catch (e) {
+    alert('Не удалось сохранить тип страницы. Проверьте соединение и попробуйте снова.');
+  }
 }
 
 async function attachToNode(rowId, nodeId) {

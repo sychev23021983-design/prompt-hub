@@ -5,8 +5,9 @@ from datetime import date
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 
 from db import get_conn, init_db
-from prompts import generate_prompt, get_related_rows
+from prompts import generate_prompt, get_related_rows, render_custom_template
 import structure
+import templates_store
 
 app = Flask(__name__)
 
@@ -75,7 +76,8 @@ def index():
     conn.close()
     return render_template("index.html", sites=sites, rows=rows, stats=stats,
                             current_site=site_slug, current_applied=applied_filter, q=search,
-                            site_options=site_options, breadcrumbs=breadcrumbs)
+                            site_options=site_options, breadcrumbs=breadcrumbs,
+                            page_types=templates_store.PAGE_TYPES)
 
 
 @app.route("/prompt/<int:row_id>")
@@ -91,14 +93,26 @@ def get_prompt(row_id):
     if row["structure_node_id"]:
         path = structure.node_path(conn, row["structure_node_id"])
         breadcrumb = " / ".join(n["title"] for n in path)
+
+    custom_template = None
+    if row["page_type"]:
+        custom_template = templates_store.get_template(conn, row["site_id"], row["page_type"])
     conn.close()
-    text = generate_prompt(row, row["prompt_style"], related, breadcrumb)
-    return jsonify({"prompt": text})
+
+    if custom_template:
+        text = render_custom_template(
+            custom_template["template_text"], row, row["prompt_style"], related, breadcrumb
+        )
+        source = "custom"
+    else:
+        text = generate_prompt(row, row["prompt_style"], related, breadcrumb)
+        source = "default"
+    return jsonify({"prompt": text, "template_source": source})
 
 
 EDITABLE_FIELDS = {
     "name", "url", "seo_title", "h1", "meta_description", "primary_keyword",
-    "secondary_keywords", "lsi_keywords", "faq_questions", "notes",
+    "secondary_keywords", "lsi_keywords", "faq_questions", "notes", "page_type",
 }
 
 
@@ -303,6 +317,81 @@ def suggest_url_route(row_id):
     suggestion = structure.suggest_url(conn, row)
     conn.close()
     return jsonify({"url": suggestion})
+
+
+# ---------------------------------------------------------------------------
+# Промпт-шаблоны: кастомные шаблоны по типу страницы (landing/about/trust/
+# faq/service/blog), редактируются здесь без git, подставляют данные строки.
+# ---------------------------------------------------------------------------
+
+@app.route("/prompt-templates")
+def prompt_templates_view():
+    conn = get_conn()
+    sites = conn.execute("SELECT * FROM sites ORDER BY id").fetchall()
+    existing = templates_store.list_templates(conn)
+    conn.close()
+    existing_map = {f"{t['site_id']}:{t['page_type']}": dict(t) for t in existing}
+    return render_template(
+        "prompt_templates.html", sites=sites, page_types=templates_store.PAGE_TYPES,
+        existing_map=existing_map,
+    )
+
+
+@app.route("/prompt-templates/save", methods=["POST"])
+def prompt_templates_save():
+    data = request.get_json(silent=True) or {}
+    site_id = data.get("site_id")
+    page_type = data.get("page_type", "")
+    template_text = data.get("template_text", "")
+    if not site_id or page_type not in templates_store.PAGE_TYPE_LABELS:
+        return jsonify({"error": "site_id и корректный page_type обязательны"}), 400
+    if not template_text.strip():
+        return jsonify({"error": "пустой шаблон"}), 400
+    conn = get_conn()
+    try:
+        templates_store.save_template(conn, site_id, page_type, template_text)
+    except Exception as e:
+        conn.close()
+        return jsonify({"error": f"ошибка сохранения (проверьте синтаксис Jinja2): {e}"}), 400
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/prompt-templates/<int:template_id>/delete", methods=["POST"])
+def prompt_templates_delete(template_id):
+    conn = get_conn()
+    templates_store.delete_template(conn, template_id)
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/prompt-templates/preview", methods=["POST"])
+def prompt_templates_preview():
+    """Пробный рендер шаблона на первой попавшейся строке сайта — чтобы можно
+    было проверить синтаксис и вывод прямо на вкладке, не сохраняя и не уходя
+    в основную таблицу."""
+    data = request.get_json(silent=True) or {}
+    site_id = data.get("site_id")
+    template_text = data.get("template_text", "")
+    conn = get_conn()
+    row = conn.execute(
+        """SELECT r.*, s.prompt_style FROM rows_ r JOIN sites s ON s.id=r.site_id
+           WHERE r.site_id=? ORDER BY r.id LIMIT 1""", (site_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"error": "на этом сайте нет ни одной строки для превью"}), 400
+    related = get_related_rows(conn, row)
+    breadcrumb = None
+    if row["structure_node_id"]:
+        path = structure.node_path(conn, row["structure_node_id"])
+        breadcrumb = " / ".join(n["title"] for n in path)
+    conn.close()
+    try:
+        text = render_custom_template(template_text, row, row["prompt_style"], related, breadcrumb)
+    except Exception as e:
+        return jsonify({"error": f"ошибка рендера (проверьте синтаксис Jinja2): {e}"}), 400
+    return jsonify({"prompt": text, "preview_row": row["name"]})
 
 
 if __name__ == "__main__":

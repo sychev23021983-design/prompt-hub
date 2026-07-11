@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Промпт-шаблоны — Prompt Hub</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Arial, sans-serif; margin: 0; background: #f5f5f4; color: #222; }
+  header { background: #1F4E78; color: #fff; padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+  header h1 { margin: 0; font-size: 20px; }
+  header a { color: #cfe0f2; font-size: 13px; }
+  .wrap { padding: 20px 24px; }
+  .intro { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 14px 16px; margin-bottom: 18px; font-size: 13px; color: #444; line-height: 1.6; }
+  .intro code { background: #f0f0f0; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  table.grid { border-collapse: collapse; background: #fff; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
+  table.grid th, table.grid td { padding: 10px 14px; border: 1px solid #eee; font-size: 13px; text-align: left; vertical-align: top; }
+  table.grid th { background: #eef2f6; }
+  .cell-btn { border: 1px solid #ccc; background: #fff; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+  .cell-btn.has-template { background: #dbe8fb; border-color: #1F4E78; color: #1a4a8a; }
+  .cell-btn:hover { background: #eef2f6; }
+  .updated { font-size: 10px; color: #999; margin-top: 4px; }
+
+  #editor-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); align-items:center; justify-content:center; z-index:100; }
+  #editor { background:#fff; border-radius:10px; padding:22px; width:min(900px,92vw); max-height:88vh; overflow:auto; }
+  #editor h3 { margin-top: 0; }
+  #editor .hint { font-size: 12px; color: #777; background: #f8f8f6; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; line-height: 1.6; }
+  #editor .hint code { background: #eee; padding: 1px 5px; border-radius: 4px; }
+  #editor-text { width: 100%; height: 420px; font-family: monospace; font-size: 12px; box-sizing: border-box; }
+  .actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  .actions button { padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; }
+  #save-btn { background: #1F4E78; color: #fff; }
+  #preview-btn { background: #eef2f6; }
+  #delete-btn { background: #f8d0d0; color: #822; }
+  #close-btn { background: #ddd; }
+  #save-status { font-size: 12px; margin-top: 8px; }
+  #preview-output { white-space: pre-wrap; background: #f8f8f6; border-radius: 6px; padding: 12px; font-size: 12px; margin-top: 12px; max-height: 320px; overflow: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧩 Промпт-шаблоны</h1>
+  <a href="/">← назад к таблице</a>
+</header>
+
+<div class="wrap">
+  <div class="intro">
+    Для каждой пары «сайт + тип страницы» можно сохранить кастомный Jinja2-шаблон
+    промпта — он подставит данные строки сами и будет использован вместо общего
+    движка, если у строки в таблице выбран этот тип страницы. Если для типа
+    кастомного шаблона нет — работает обычная генерация как раньше.<br><br>
+    <b>Доступные переменные в шаблоне:</b><br>
+    <code>{{ '{{ row.name }}' }}</code>, <code>{{ '{{ row.primary_keyword }}' }}</code>,
+    <code>{{ '{{ row.secondary_keywords }}' }}</code>, <code>{{ '{{ row.seo_title }}' }}</code>,
+    <code>{{ '{{ row.h1 }}' }}</code>, <code>{{ '{{ row.meta_description }}' }}</code>,
+    <code>{{ '{{ row.lsi_keywords }}' }}</code>, <code>{{ '{{ row.faq_questions }}' }}</code>,
+    <code>{{ '{{ row.notes }}' }}</code>, <code>{{ '{{ row.url }}' }}</code> — любое поле строки напрямую;<br>
+    <code>{{ '{{ breadcrumb }}' }}</code> — хлебные крошки раздела структуры (если страница привязана);<br>
+    <code>{{ '{{ related_block }}' }}</code> — готовый текстовый список реальных связанных страниц;
+    <code>{{ '{{ has_related }}' }}</code> — есть ли они (для <code>{{ '{% if has_related %}' }}</code>);<br>
+    <code>{{ '{{ input_lines }}' }}</code> — тот же список строк входных данных, что и в обычном
+    движке (можно вывести циклом <code>{{ '{% for line in input_lines %}' }}</code>);<br>
+    <code>{{ '{{ cfg.persona }}' }}</code>, <code>{{ '{{ cfg.banned_words }}' }}</code>,
+    <code>{{ '{{ cfg.tone_bullets }}' }}</code> и другие поля конфига сайта (persona/audience/
+    eeat_frame/local_seo/no_invent/...) — та же структура, что в <code>prompt_config/&lt;site&gt;.yaml</code>;<br>
+    <code>{{ '{{ limits.seo_title_chars }}' }}</code> и другие лимиты из <code>_shared_defaults.yaml</code>.
+  </div>
+
+  <table class="grid">
+    <tr>
+      <th>Тип страницы</th>
+      {% for s in sites %}<th>{{ s.name }}</th>{% endfor %}
+    </tr>
+    {% for code, label in page_types %}
+    <tr>
+      <td>{{ label }}<br><span style="color:#999;font-size:11px">{{ code }}</span></td>
+      {% for s in sites %}
+      {% set key = s.id ~ ':' ~ code %}
+      {% set t = existing_map.get(key) %}
+      <td>
+        <button class="cell-btn {% if t %}has-template{% endif %}"
+                onclick="openEditor({{ s.id }}, '{{ code }}', {{ s.name|tojson }}, {{ label|tojson }})">
+          {% if t %}✎ Изменить{% else %}+ Создать{% endif %}
+        </button>
+        {% if t %}<div class="updated">обновлён {{ t.updated_at }}</div>{% endif %}
+      </td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div id="editor-overlay">
+  <div id="editor">
+    <h3 id="editor-title"></h3>
+    <div class="hint">Jinja2-шаблон. Заголовки разделов начинайте с <code># </code> — это Markdown.</div>
+    <textarea id="editor-text" placeholder="Вставьте сюда текст шаблона..."></textarea>
+    <div class="actions">
+      <button id="save-btn" onclick="saveTemplate()">Сохранить</button>
+      <button id="preview-btn" onclick="previewTemplate()">Превью на первой строке сайта</button>
+      <button id="delete-btn" onclick="deleteTemplate()" style="display:none">Удалить шаблон</button>
+      <button id="close-btn" onclick="closeEditor()">Закрыть</button>
+    </div>
+    <div id="save-status"></div>
+    <div id="preview-output" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+const EXISTING = {{ existing_map | tojson }};
+let current = {siteId: null, pageType: null};
+
+function openEditor(siteId, pageType, siteName, pageLabel) {
+  current = {siteId, pageType};
+  document.getElementById('editor-title').textContent = pageLabel + ' — ' + siteName;
+  const key = siteId + ':' + pageType;
+  const existing = EXISTING[key];
+  document.getElementById('editor-text').value = existing ? existing.template_text : '';
+  document.getElementById('delete-btn').style.display = existing ? 'inline-block' : 'none';
+  document.getElementById('save-status').textContent = '';
+  document.getElementById('preview-output').style.display = 'none';
+  document.getElementById('editor-overlay').style.display = 'flex';
+}
+
+function closeEditor() {
+  document.getElementById('editor-overlay').style.display = 'none';
+}
+
+async function saveTemplate() {
+  const template_text = document.getElementById('editor-text').value;
+  const statusEl = document.getElementById('save-status');
+  statusEl.style.color = '#666';
+  statusEl.textContent = 'Сохраняю...';
+  try {
+    const res = await fetch('/prompt-templates/save', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({site_id: current.siteId, page_type: current.pageType, template_text})
+    });
+    const data = await res.json();
+    if (res.ok) {
+      statusEl.style.color = '#2a7a2a';
+      statusEl.textContent = 'Сохранено.';
+      setTimeout(() => location.reload(), 700);
+    } else {
+      statusEl.style.color = '#b33';
+      statusEl.textContent = 'Ошибка: ' + (data.error || 'неизвестная');
+    }
+  } catch (e) {
+    statusEl.style.color = '#b33';
+    statusEl.textContent = 'Ошибка сети.';
+  }
+}
+
+async function previewTemplate() {
+  const template_text = document.getElementById('editor-text').value;
+  const outEl = document.getElementById('preview-output');
+  outEl.style.display = 'block';
+  outEl.textContent = 'Рендерю...';
+  try {
+    const res = await fetch('/prompt-templates/preview', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({site_id: current.siteId, template_text})
+    });
+    const data = await res.json();
+    if (res.ok) {
+      outEl.textContent = 'Превью на строке "' + data.preview_row + '":\n\n' + data.prompt;
+    } else {
+      outEl.textContent = 'Ошибка: ' + (data.error || 'неизвестная');
+    }
+  } catch (e) {
+    outEl.textContent = 'Ошибка сети.';
+  }
+}
+
+async function deleteTemplate() {
+  const key = current.siteId + ':' + current.pageType;
+  const existing = EXISTING[key];
+  if (!existing) return;
+  if (!confirm('Удалить этот шаблон? Страницы этого типа вернутся к обычной генерации.')) return;
+  const res = await fetch('/prompt-templates/' + existing.id + '/delete', {method: 'POST'});
+  if (res.ok) location.reload();
+  else alert('Не удалось удалить');
+}
+</script>
+</body>
+</html>

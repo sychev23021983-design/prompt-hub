@@ -198,7 +198,12 @@ def _page_kind(row, prompt_style):
             "не пиши общих рассуждений о теме — сразу к делу")
 
 
-def build_prompt(row, prompt_style, related_rows=None, breadcrumb=None):
+def build_context(row, prompt_style, related_rows=None, breadcrumb=None):
+    """Собирает весь контекст для рендера промпта — общий как для дефолтного
+    файлового шаблона (master_prompt.md.j2), так и для кастомных шаблонов типов
+    страниц, сохранённых на вкладке "Промпт-шаблоны" (см. templates_store.py).
+    Кастомные шаблоны получают доступ и к этим готовым полям (input_lines,
+    related_block, cfg, limits...), и к «сырым» полям строки через `row`."""
     cfg = _get_site_config(prompt_style)
     extra = _extra(row)
     related = related_rows or []
@@ -237,8 +242,8 @@ def build_prompt(row, prompt_style, related_rows=None, breadcrumb=None):
 
     related_block = _format_related(related, cfg)
 
-    template = _env.get_template("master_prompt.md.j2")
-    return template.render(
+    return dict(
+        row=dict(row),
         cfg=cfg,
         limits=cfg["_limits"],
         ai_openers=cfg["ai_openers"],
@@ -246,11 +251,29 @@ def build_prompt(row, prompt_style, related_rows=None, breadcrumb=None):
         kind_goal=kind_goal,
         kind_avoid=kind_avoid,
         input_lines=input_lines,
+        related=related,
         related_block=related_block,
         has_related=has_related,
         has_faq=has_faq,
+        breadcrumb=breadcrumb or "",
     )
+
+
+def build_prompt(row, prompt_style, related_rows=None, breadcrumb=None):
+    context = build_context(row, prompt_style, related_rows, breadcrumb)
+    template = _env.get_template("master_prompt.md.j2")
+    return template.render(**context)
 
 
 def generate_prompt(row, prompt_style, related_rows=None, breadcrumb=None):
     return build_prompt(row, prompt_style, related_rows, breadcrumb)
+
+
+def render_custom_template(template_text, row, prompt_style, related_rows=None, breadcrumb=None):
+    """Рендерит кастомный шаблон типа страницы (текст из prompt_templates в БД,
+    вкладка "Промпт-шаблоны") с тем же контекстом, что и дефолтный шаблон —
+    можно использовать и готовые {{ input_lines }}/{{ related_block }}, и
+    напрямую поля строки: {{ row.name }}, {{ row.primary_keyword }} и т.д."""
+    context = build_context(row, prompt_style, related_rows, breadcrumb)
+    template = _env.from_string(template_text)
+    return template.render(**context)

@@ -23,6 +23,15 @@ CREATE TABLE IF NOT EXISTS structure_nodes (
     path_order TEXT                  -- материализованный путь для сортировки всего дерева одним ORDER BY
 );
 
+CREATE TABLE IF NOT EXISTS prompt_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_id INTEGER NOT NULL REFERENCES sites(id),
+    page_type TEXT NOT NULL,         -- 'landing' | 'about' | 'trust' | 'faq' | 'service' | 'blog' | ...
+    template_text TEXT NOT NULL,     -- Jinja2-шаблон, редактируется на вкладке "Промпт-шаблоны"
+    updated_at TEXT,
+    UNIQUE(site_id, page_type)
+);
+
 CREATE TABLE IF NOT EXISTS rows_ (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     site_id INTEGER NOT NULL REFERENCES sites(id),
@@ -41,27 +50,32 @@ CREATE TABLE IF NOT EXISTS rows_ (
     applied TEXT DEFAULT 'No',       -- No | Yes | Skipped
     date_applied TEXT,
     notes TEXT,
-    structure_node_id INTEGER REFERENCES structure_nodes(id)  -- привязка к разделу структуры
+    structure_node_id INTEGER REFERENCES structure_nodes(id),  -- привязка к разделу структуры
+    page_type TEXT                   -- 'landing' | 'about' | 'trust' | 'faq' | 'service' | 'blog' | ... (выбирает шаблон промпта)
 );
 
 CREATE INDEX IF NOT EXISTS idx_rows_site ON rows_(site_id);
 CREATE INDEX IF NOT EXISTS idx_rows_applied ON rows_(applied);
 CREATE INDEX IF NOT EXISTS idx_structure_site ON structure_nodes(site_id);
 CREATE INDEX IF NOT EXISTS idx_structure_parent ON structure_nodes(parent_id);
+CREATE INDEX IF NOT EXISTS idx_prompt_templates_site ON prompt_templates(site_id);
 """
 
-# Миграция для БД, созданных до появления структуры сайта (добавляет колонку, если
-# её ещё нет — CREATE TABLE IF NOT EXISTS выше не трогает уже существующую таблицу rows_).
+# Миграция для БД, созданных до появления структуры сайта/типов страниц (добавляет
+# колонку, если её ещё нет — CREATE TABLE IF NOT EXISTS выше не трогает уже
+# существующую таблицу rows_).
 MIGRATIONS = [
     "ALTER TABLE rows_ ADD COLUMN structure_node_id INTEGER REFERENCES structure_nodes(id)",
+    "ALTER TABLE rows_ ADD COLUMN page_type TEXT",
 ]
 
 # Индексы, зависящие от колонок, добавляемых миграциями выше — создаются ПОСЛЕ
-# миграции, а не в SCHEMA: на БД, где rows_ уже существовала без structure_node_id,
-# CREATE TABLE IF NOT EXISTS её не добавляет, и CREATE INDEX на неё упал бы раньше,
+# миграции, а не в SCHEMA: на БД, где rows_ уже существовала без этих колонок,
+# CREATE TABLE IF NOT EXISTS их не добавляет, и CREATE INDEX на них упал бы раньше,
 # чем отработает ALTER TABLE (именно так и случилось на проде — см. историю).
 POST_MIGRATION_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_rows_structure ON rows_(structure_node_id)",
+    "CREATE INDEX IF NOT EXISTS idx_rows_page_type ON rows_(page_type)",
 ]
 
 def get_conn():
