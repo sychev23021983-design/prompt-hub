@@ -276,6 +276,62 @@ def get_top_level_sections(conn, site_id):
     return result
 
 
+def get_full_structure_block(conn, site_id, exclude_row_id=None):
+    """Полное дерево структуры сайта текстом, с отступами по уровням — для
+    лендинга/главной, где нужен обзор ВСЕГО сайта, а не только верхнего
+    уровня (в отличие от get_top_level_sections). Частый случай: у
+    промежуточных узлов (например "Фитнес") нет своей страницы — реальные
+    страницы привязаны к их детям ("Персональные тренировки" и т.д.), поэтому
+    именно полный рекурсивный обход нужен, чтобы показать все реальные ссылки.
+
+    Для каждого узла — реальная ссылка, если на НЕГО САМОГО привязана
+    страница; если нет — просто название без ссылки (это узел-категория, не
+    страница). Пропускает единственный корень-обёртку (см.
+    get_top_level_sections) и саму текущую страницу (exclude_row_id), чтобы
+    лендинг не ссылался сам на себя."""
+    roots = conn.execute(
+        "SELECT * FROM structure_nodes WHERE site_id=? AND parent_id IS NULL ORDER BY path_order",
+        (site_id,)
+    ).fetchall()
+    if len(roots) == 1:
+        start_nodes = conn.execute(
+            "SELECT * FROM structure_nodes WHERE parent_id=? ORDER BY path_order",
+            (roots[0]["id"],)
+        ).fetchall()
+    else:
+        start_nodes = roots
+
+    all_nodes = conn.execute(
+        "SELECT * FROM structure_nodes WHERE site_id=? ORDER BY path_order", (site_id,)
+    ).fetchall()
+    children_map = {}
+    for n in all_nodes:
+        children_map.setdefault(n["parent_id"], []).append(n)
+
+    lines = []
+
+    def walk(node, depth):
+        page = conn.execute(
+            "SELECT id, name, url FROM rows_ WHERE structure_node_id=? LIMIT 1",
+            (node["id"],)
+        ).fetchone()
+        if page and exclude_row_id and page["id"] == exclude_row_id:
+            page = None
+        label = page["name"] if page else node["title"]
+        indent = "  " * depth
+        if page and page["url"]:
+            lines.append(f"{indent}- {label} — {page['url']}")
+        else:
+            lines.append(f"{indent}- {label}")
+        for child in children_map.get(node["id"], []):
+            walk(child, depth + 1)
+
+    for n in start_nodes:
+        walk(n, 0)
+
+    return "\n".join(lines) if lines else "Структура сайта пока не заполнена."
+
+
 def node_path(conn, node_id):
     """Список узлов от корня до node_id включительно."""
     path = []

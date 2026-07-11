@@ -95,6 +95,7 @@ def get_prompt(row_id):
         path = structure.node_path(conn, row["structure_node_id"])
         breadcrumb = " / ".join(n["title"] for n in path)
     top_level_sections = structure.get_top_level_sections(conn, row["site_id"])
+    full_structure_block = structure.get_full_structure_block(conn, row["site_id"], exclude_row_id=row["id"])
 
     custom_template = None
     if row["page_type"]:
@@ -104,11 +105,12 @@ def get_prompt(row_id):
     if custom_template:
         text = render_custom_template(
             custom_template["template_text"], row, row["prompt_style"], related, breadcrumb,
-            top_level_sections
+            top_level_sections, full_structure_block
         )
         source = "custom"
     else:
-        text = generate_prompt(row, row["prompt_style"], related, breadcrumb, top_level_sections)
+        text = generate_prompt(row, row["prompt_style"], related, breadcrumb, top_level_sections,
+                                full_structure_block)
         source = "default"
     return jsonify({"prompt": text, "template_source": source})
 
@@ -449,10 +451,11 @@ def prompt_templates_preview():
         path = structure.node_path(conn, row["structure_node_id"])
         breadcrumb = " / ".join(n["title"] for n in path)
     top_level_sections = structure.get_top_level_sections(conn, site_id)
+    full_structure_block = structure.get_full_structure_block(conn, site_id, exclude_row_id=row["id"])
     conn.close()
     try:
         text = render_custom_template(template_text, row, row["prompt_style"], related, breadcrumb,
-                                       top_level_sections)
+                                       top_level_sections, full_structure_block)
     except Exception as e:
         return jsonify({"error": f"ошибка рендера (проверьте синтаксис Jinja2): {e}"}), 400
     return jsonify({"prompt": text, "preview_row": row["name"]})
