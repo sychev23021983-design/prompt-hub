@@ -235,17 +235,35 @@ def get_breadcrumbs(conn, site_id):
 
 
 def get_top_level_sections(conn, site_id):
-    """Список корневых разделов дерева структуры сайта с реальными ссылками
+    """Список ключевых разделов дерева структуры сайта с реальными ссылками
     (если на раздел уже привязана страница) — для лендинга/главной страницы,
     где нужен обзор всего сайта, а не только соседей текущей страницы (в
     отличие от related_rows, которые ищут по structure_node_id/vendor/geo
-    вокруг конкретной страницы)."""
+    вокруг конкретной страницы).
+
+    Если в дереве несколько корневых узлов — берём их напрямую (это и есть
+    основные разделы). Но частый паттерн (например при вставке дерева из
+    KeyCollector, где сама структура начинается с "Главная") — когда корень
+    ОДИН и представляет саму главную страницу, а реальные разделы (Услуги,
+    Блог, Контакты...) вложены на уровень ниже, как его дети. В этом случае
+    сам корень для лендинга бесполезен (это и есть текущая страница), поэтому
+    берём его детей."""
     roots = conn.execute(
         "SELECT * FROM structure_nodes WHERE site_id=? AND parent_id IS NULL ORDER BY path_order",
         (site_id,)
     ).fetchall()
+
+    if len(roots) == 1:
+        children = conn.execute(
+            "SELECT * FROM structure_nodes WHERE parent_id=? ORDER BY path_order",
+            (roots[0]["id"],)
+        ).fetchall()
+        source_nodes = children if children else roots
+    else:
+        source_nodes = roots
+
     result = []
-    for n in roots:
+    for n in source_nodes:
         page = conn.execute(
             "SELECT name, url FROM rows_ WHERE structure_node_id=? LIMIT 1",
             (n["id"],)
