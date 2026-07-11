@@ -31,7 +31,13 @@
   .editable.saved { background: #d9f2d9 !important; transition: background 0.6s; }
   .editable.error { background: #f8d0d0 !important; }
   .name-cell { max-width: 220px; }
-  .url-cell { max-width: 160px; font-size: 11px; color: #777; word-break: break-all; }
+  .url-wrap { display: flex; align-items: flex-start; gap: 4px; }
+  .url-cell { min-width: 140px; max-width: 200px; font-size: 11px; color: #444; word-break: break-all; }
+  .suggest-btn { border: 1px solid #ccc; background: #fff; border-radius: 5px; cursor: pointer; font-size: 12px; padding: 2px 5px; }
+  .suggest-btn:hover { background: #eef2f6; }
+  .structure-cell { min-width: 170px; }
+  .structure-select { width: 100%; font-size: 11px; padding: 3px; }
+  .breadcrumb { font-size: 10px; color: #888; margin-top: 3px; max-width: 190px; }
   #modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); align-items:center; justify-content:center; z-index:100; }
   #modal { background:#fff; border-radius:10px; padding:20px; width:min(720px,90vw); max-height:80vh; overflow:auto; }
   #modal textarea { width:100%; height:320px; font-family: monospace; font-size: 12px; }
@@ -68,6 +74,11 @@
   </select>
   <input type="text" name="q" placeholder="Поиск по названию/ключу..." value="{{ q }}">
   <button type="submit">Найти</button>
+  {% if current_site %}
+  <a href="/structure/{{ current_site }}"><button type="button">📂 Структура сайта</button></a>
+  {% else %}
+  <span style="font-size:12px;color:#888">Выберите сайт, чтобы открыть его структуру</span>
+  {% endif %}
 </form>
 
 <div class="toolbar">
@@ -84,7 +95,7 @@
 <table>
 <thead>
 <tr>
-  <th>Сайт</th><th>Раздел</th><th>Название</th><th>URL</th><th>Тип</th>
+  <th>Сайт</th><th>Раздел</th><th>Структура</th><th>Название</th><th>URL</th><th>Тип</th>
   <th>SEO Title</th><th>H1</th><th>Meta Description</th>
   <th>Primary keyword</th><th>Secondary keywords</th><th>LSI keywords</th><th>FAQ</th>
   <th>Notes</th><th>Статус</th><th>Действия</th>
@@ -95,8 +106,22 @@
 <tr id="row-{{ r.id }}" class="{% if r.applied=='Yes' %}applied-yes{% elif r.applied=='Skipped' %}applied-skipped{% endif %}">
   <td><span class="badge badge-{{ r.prompt_style }}">{{ r.site_name }}</span></td>
   <td>{{ r.sheet }}</td>
+  <td class="structure-cell">
+    <select class="structure-select" data-row="{{ r.id }}" onchange="attachToNode({{ r.id }}, this.value)">
+      <option value="">— не привязано —</option>
+      {% for opt in site_options.get(r.site_id, []) %}
+      <option value="{{ opt.id }}" {% if r.structure_node_id==opt.id %}selected{% endif %}>{{ opt.label }}</option>
+      {% endfor %}
+    </select>
+    {% if r.structure_node_id %}
+    <div class="breadcrumb">{{ breadcrumbs.get(r.structure_node_id, '') }}</div>
+    {% endif %}
+  </td>
   <td class="editable name-cell" contenteditable="true" data-row="{{ r.id }}" data-field="name">{{ r.name }}</td>
-  <td class="url-cell">{{ r.url or '—' }}</td>
+  <td class="url-wrap">
+    <div class="editable url-cell" contenteditable="true" data-row="{{ r.id }}" data-field="url" id="url-{{ r.id }}">{{ r.url or '' }}</div>
+    <button type="button" class="suggest-btn" onclick="suggestUrl({{ r.id }})" title="Предложить URL по структуре">🔗</button>
+  </td>
   <td>{{ r.row_type }}</td>
   <td class="editable" contenteditable="true" data-row="{{ r.id }}" data-field="seo_title">{{ r.seo_title }}</td>
   <td class="editable" contenteditable="true" data-row="{{ r.id }}" data-field="h1">{{ r.h1 }}</td>
@@ -145,6 +170,45 @@ function copyPrompt() {
   const ta = document.getElementById('prompt-text');
   ta.select();
   document.execCommand('copy');
+}
+
+async function attachToNode(rowId, nodeId) {
+  try {
+    const res = await fetch('/attach/' + rowId, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({node_id: nodeId ? parseInt(nodeId, 10) : null})
+    });
+    if (!res.ok) throw new Error('bad response');
+    location.reload();
+  } catch (e) {
+    alert('Не удалось привязать страницу к разделу. Проверьте соединение и попробуйте снова.');
+  }
+}
+
+async function suggestUrl(rowId) {
+  try {
+    const res = await fetch('/suggest_url/' + rowId);
+    const data = await res.json();
+    if (data.url) {
+      const cell = document.getElementById('url-' + rowId);
+      cell.textContent = data.url;
+      // сохраняем сразу, как обычное редактируемое поле
+      const res2 = await fetch('/update/' + rowId, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({field: 'url', value: data.url})
+      });
+      if (res2.ok) {
+        cell.classList.add('saved');
+        setTimeout(() => cell.classList.remove('saved'), 700);
+      }
+    } else {
+      alert('Не удалось предложить URL: страница не привязана к разделу структуры и не имеет названия.');
+    }
+  } catch (e) {
+    alert('Не удалось получить подсказку URL.');
+  }
 }
 
 // Автосохранение редактируемых ячеек при потере фокуса

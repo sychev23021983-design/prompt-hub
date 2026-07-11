@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Структура — {{ site.name }}</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Arial, sans-serif; margin: 0; background: #f5f5f4; color: #222; }
+  header { background: #1F4E78; color: #fff; padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+  header h1 { margin: 0; font-size: 20px; }
+  header a { color: #cfe0f2; font-size: 13px; }
+  .wrap { display: flex; gap: 20px; padding: 20px 24px; align-items: flex-start; flex-wrap: wrap; }
+  .panel { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 16px; }
+  .import-panel { flex: 0 0 380px; }
+  .tree-panel { flex: 1 1 480px; min-width: 380px; }
+  .unattached-panel { flex: 0 0 340px; }
+  h3 { margin-top: 0; font-size: 15px; }
+  textarea#tree-text { width: 100%; height: 220px; font-family: monospace; font-size: 12px; box-sizing: border-box; }
+  .hint { font-size: 11px; color: #888; margin-top: 6px; line-height: 1.5; }
+  button.primary { background: #1F4E78; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; margin-top: 10px; }
+  button.primary:hover { background: #163a5a; }
+  #import-result { font-size: 12px; margin-top: 8px; color: #2a7a2a; }
+  ul.tree { list-style: none; margin: 0; padding-left: 18px; }
+  ul.tree.root { padding-left: 0; }
+  li.node { margin: 3px 0; }
+  .node-row { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .node-title { cursor: text; padding: 2px 4px; border-radius: 4px; }
+  .node-title:hover { background: #fffbe6; }
+  .node-title:focus { background: #fff; box-shadow: inset 0 0 0 2px #1F4E78; outline: none; }
+  .node-slug { font-size: 11px; color: #888; padding: 2px 4px; border-radius: 4px; min-width: 60px; }
+  .node-slug:hover { background: #fffbe6; }
+  .node-slug:focus { background: #fff; box-shadow: inset 0 0 0 1px #aaa; outline: none; }
+  .node-count { font-size: 11px; color: #1F4E78; background: #dbe8fb; border-radius: 8px; padding: 0 6px; }
+  .node-actions { font-size: 11px; }
+  .node-actions button { border: none; background: none; cursor: pointer; color: #888; font-size: 12px; padding: 2px 4px; }
+  .node-actions button:hover { color: #1F4E78; }
+  .add-root { margin-top: 10px; }
+  .add-root input { padding: 6px; border-radius: 6px; border: 1px solid #ccc; font-size: 12px; }
+  ul.unattached { list-style: none; margin: 0; padding: 0; max-height: 520px; overflow-y: auto; }
+  ul.unattached li { padding: 6px 4px; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
+  ul.unattached select { width: 100%; font-size: 11px; margin-top: 4px; }
+  .saved-flash { background: #d9f2d9 !important; transition: background 0.6s; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Структура — {{ site.name }}</h1>
+  <a href="/?site={{ site.slug }}">← назад к таблице</a>
+</header>
+
+<div class="wrap">
+
+  <div class="panel import-panel">
+    <h3>Вставить дерево из KeyCollector</h3>
+    <textarea id="tree-text" placeholder="Оборудование&#10;    Серверы&#10;        Dell&#10;        HPE&#10;    СХД"></textarea>
+    <div class="hint">
+      Отступ (таб или пробелы) = уровень вложенности. Маркеры "- " / "* " перед
+      названием — необязательны, снимаются автоматически. Повторная вставка
+      обновлённого списка ничего не удаляет и не рвёт уже сделанные привязки —
+      новые разделы просто добавляются, совпадающие по названию и родителю не дублируются.
+    </div>
+    <button class="primary" onclick="importTree()">Импортировать / обновить дерево</button>
+    <div id="import-result"></div>
+
+    <h3 style="margin-top:22px">Добавить раздел вручную</h3>
+    <div class="add-root">
+      <input type="text" id="new-root-title" placeholder="Название раздела" style="width:70%">
+      <button class="primary" style="margin-top:0" onclick="addNode(null, 'new-root-title')">Добавить корневой</button>
+    </div>
+  </div>
+
+  <div class="panel tree-panel">
+    <h3>Дерево разделов {% if tree %}({{ tree|length }} корневых){% endif %}</h3>
+    {% if not tree %}
+    <p style="color:#888;font-size:13px">Пока пусто — вставьте дерево слева или добавьте раздел вручную.</p>
+    {% endif %}
+    {% macro render_nodes(nodes) %}
+    <ul class="tree{% if nodes==tree %} root{% endif %}">
+      {% for n in nodes %}
+      <li class="node" data-node-id="{{ n.id }}">
+        <div class="node-row">
+          <span class="node-title" contenteditable="true" data-node="{{ n.id }}" onblur="renameNode({{ n.id }}, this.textContent)">{{ n.title }}</span>
+          <span class="node-slug" contenteditable="true" data-node="{{ n.id }}" onblur="updateSlug({{ n.id }}, this.textContent)">/{{ n.slug }}</span>
+          {% if n.attached_count %}<span class="node-count">{{ n.attached_count }} стр.</span>{% endif %}
+          <span class="node-actions">
+            <button onclick="promptAddChild({{ n.id }})" title="Добавить подраздел">+ подраздел</button>
+            <button onclick="deleteNode({{ n.id }})" title="Удалить (только если пусто)">✕</button>
+          </span>
+        </div>
+        {% if n.children %}
+        {{ render_nodes(n.children) }}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endmacro %}
+    {{ render_nodes(tree) }}
+  </div>
+
+  <div class="panel unattached-panel">
+    <h3>Непривязанные страницы ({{ unattached|length }})</h3>
+    <ul class="unattached">
+      {% for r in unattached %}
+      <li>
+        {{ r.name }} <span style="color:#aaa">[{{ r.sheet }}]</span>
+        <select onchange="attachAndRefresh({{ r.id }}, this.value)">
+          <option value="">— привязать к разделу —</option>
+          {% for opt in flat_options %}
+          <option value="{{ opt.id }}">{{ opt.label }}</option>
+          {% endfor %}
+        </select>
+      </li>
+      {% else %}
+      <li style="color:#888">Все страницы привязаны 🎉</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+</div>
+
+<script>
+const SITE_SLUG = "{{ site.slug }}";
+
+async function importTree() {
+  const text = document.getElementById('tree-text').value;
+  if (!text.trim()) return;
+  const res = await fetch('/structure/' + SITE_SLUG + '/import', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({text})
+  });
+  const data = await res.json();
+  const resultEl = document.getElementById('import-result');
+  if (res.ok) {
+    resultEl.style.color = '#2a7a2a';
+    resultEl.textContent = `Готово: создано ${data.created}, уже было ${data.matched}, всего разобрано ${data.total} строк.`;
+    setTimeout(() => location.reload(), 900);
+  } else {
+    resultEl.style.color = '#b33';
+    resultEl.textContent = 'Ошибка: ' + (data.error || 'неизвестная');
+  }
+}
+
+async function addNode(parentId, inputId) {
+  const input = document.getElementById(inputId);
+  const title = input.value.trim();
+  if (!title) return;
+  const res = await fetch('/structure/node', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({site_slug: SITE_SLUG, parent_id: parentId, title})
+  });
+  if (res.ok) { location.reload(); }
+  else { alert('Не удалось добавить раздел'); }
+}
+
+function promptAddChild(parentId) {
+  const title = prompt('Название подраздела:');
+  if (!title || !title.trim()) return;
+  fetch('/structure/node', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({site_slug: SITE_SLUG, parent_id: parentId, title: title.trim()})
+  }).then(res => { if (res.ok) location.reload(); else alert('Не удалось добавить подраздел'); });
+}
+
+async function renameNode(nodeId, newTitle) {
+  newTitle = newTitle.trim();
+  if (!newTitle) return;
+  await fetch('/structure/node/' + nodeId, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({title: newTitle})
+  });
+}
+
+async function updateSlug(nodeId, newSlug) {
+  newSlug = newSlug.trim().replace(/^\//, '');
+  await fetch('/structure/node/' + nodeId, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({slug: newSlug})
+  });
+}
+
+async function deleteNode(nodeId) {
+  if (!confirm('Удалить раздел? Это возможно только если в нём нет подразделов и привязанных страниц.')) return;
+  const res = await fetch('/structure/node/' + nodeId + '/delete', {method: 'POST'});
+  const data = await res.json();
+  if (res.ok) location.reload();
+  else alert(data.error || 'Не удалось удалить');
+}
+
+async function attachAndRefresh(rowId, nodeId) {
+  if (!nodeId) return;
+  await fetch('/attach/' + rowId, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({node_id: parseInt(nodeId, 10)})
+  });
+  location.reload();
+}
+</script>
+</body>
+</html>
