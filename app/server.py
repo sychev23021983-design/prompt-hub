@@ -87,8 +87,12 @@ def get_prompt(row_id):
         conn.close()
         return jsonify({"error": "not found"}), 404
     related = get_related_rows(conn, row)
+    breadcrumb = None
+    if row["structure_node_id"]:
+        path = structure.node_path(conn, row["structure_node_id"])
+        breadcrumb = " / ".join(n["title"] for n in path)
     conn.close()
-    text = generate_prompt(row, row["prompt_style"], related)
+    text = generate_prompt(row, row["prompt_style"], related, breadcrumb)
     return jsonify({"prompt": text})
 
 

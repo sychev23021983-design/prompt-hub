@@ -75,33 +75,75 @@ def _extra(row):
 
 
 def get_related_rows(conn, row, limit=6):
-    """Ищет реальные связанные строки того же сайта — сначала по vendor/geo/section из
-    extra_json (высокая релевантность), затем добивает по типу страницы."""
-    extra = _extra(row)
-    site_id = row["site_id"]
+    """Ищет реальные связанные строки того же сайта. Приоритет источников:
+    1) структура сайта, если страница к ней привязана — другие страницы того же
+       раздела, страница родительского раздела (категории), страницы соседних
+       разделов; это самый точный источник, т.к. отражает реальную архитектуру сайта
+    2) старая эвристика по vendor/geo/section из extra_json
+    3) страницы того же типа (row_type)
+    Добивает лимит по порядку, не дублируя уже найденное."""
     candidates = {}
+    node_id = row["structure_node_id"]
 
-    for key in ("vendor", "geo", "section"):
-        val = extra.get(key)
-        if val:
-            more = conn.execute(
-                """SELECT id, name, url FROM rows_
-                   WHERE site_id=? AND extra_json LIKE ? AND id!=? LIMIT ?""",
-                (site_id, f'%"{key}": "{val}"%', row["id"], limit)
-            ).fetchall()
-            for r in more:
-                candidates[r["id"]] = r
-        if len(candidates) >= limit:
-            break
+    if node_id:
+        same_node = conn.execute(
+            "SELECT id, name, url FROM rows_ WHERE structure_node_id=? AND id!=? LIMIT ?",
+            (node_id, row["id"], limit)
+        ).fetchall()
+        for r in same_node:
+            candidates[r["id"]] = r
+
+        if len(candidates) < limit:
+            node = conn.execute("SELECT parent_id FROM structure_nodes WHERE id=?", (node_id,)).fetchone()
+            parent_id = node["parent_id"] if node else None
+            if parent_id:
+                parent_page = conn.execute(
+                    "SELECT id, name, url FROM rows_ WHERE structure_node_id=? AND id!=? LIMIT 1",
+                    (parent_id, row["id"])
+                ).fetchall()
+                for r in parent_page:
+                    candidates[r["id"]] = r
+
+                if len(candidates) < limit:
+                    sibling_nodes = conn.execute(
+                        "SELECT id FROM structure_nodes WHERE parent_id=? AND id!=?",
+                        (parent_id, node_id)
+                    ).fetchall()
+                    sibling_ids = [s["id"] for s in sibling_nodes]
+                    if sibling_ids:
+                        placeholders = ",".join("?" * len(sibling_ids))
+                        more = conn.execute(
+                            f"""SELECT id, name, url FROM rows_
+                                WHERE structure_node_id IN ({placeholders}) AND id!=? LIMIT ?""",
+                            (*sibling_ids, row["id"], limit - len(candidates))
+                        ).fetchall()
+                        for r in more:
+                            candidates[r["id"]] = r
 
     if len(candidates) < limit:
-        rows_same_type = conn.execute(
-            """SELECT id, name, url FROM rows_
-               WHERE site_id=? AND row_type=? AND id!=? LIMIT ?""",
-            (site_id, row["row_type"], row["id"], limit - len(candidates))
-        ).fetchall()
-        for r in rows_same_type:
-            candidates[r["id"]] = r
+        extra = _extra(row)
+        site_id = row["site_id"]
+        for key in ("vendor", "geo", "section"):
+            val = extra.get(key)
+            if val:
+                more = conn.execute(
+                    """SELECT id, name, url FROM rows_
+                       WHERE site_id=? AND extra_json LIKE ? AND id!=? LIMIT ?""",
+                    (site_id, f'%"{key}": "{val}"%', row["id"], limit - len(candidates))
+                ).fetchall()
+                for r in more:
+                    candidates[r["id"]] = r
+            if len(candidates) >= limit:
+                break
+
+        if len(candidates) < limit:
+            rows_same_type = conn.execute(
+                """SELECT id, name, url FROM rows_
+                   WHERE site_id=? AND row_type=? AND id!=? LIMIT ?""",
+                (site_id, row["row_type"], row["id"], limit - len(candidates))
+            ).fetchall()
+            for r in rows_same_type:
+                candidates[r["id"]] = r
 
     return list(candidates.values())[:limit]
 
@@ -146,7 +188,7 @@ def _page_kind(row, prompt_style):
             "не пиши общих рассуждений о теме — сразу к делу")
 
 
-def build_prompt(row, prompt_style, related_rows=None):
+def build_prompt(row, prompt_style, related_rows=None, breadcrumb=None):
     cfg = _get_site_config(prompt_style)
     extra = _extra(row)
     related = related_rows or []
@@ -157,6 +199,8 @@ def build_prompt(row, prompt_style, related_rows=None):
         f"Раздел/тип: {row['row_type']}",
         f"URL: {row['url'] or '(ещё не опубликован)'}",
     ]
+    if breadcrumb:
+        input_lines.append(f"Раздел структуры сайта (хлебные крошки): {breadcrumb}")
     if extra.get("vendor"):
         input_lines.append(f"Вендор: {extra['vendor']}")
     if extra.get("geo"):
@@ -195,5 +239,5 @@ def build_prompt(row, prompt_style, related_rows=None):
     )
 
 
-def generate_prompt(row, prompt_style, related_rows=None):
-    return build_prompt(row, prompt_style, related_rows)
+def generate_prompt(row, prompt_style, related_rows=None, breadcrumb=None):
+    return build_prompt(row, prompt_style, related_rows, breadcrumb)
