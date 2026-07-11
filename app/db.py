@@ -46,7 +46,6 @@ CREATE TABLE IF NOT EXISTS rows_ (
 
 CREATE INDEX IF NOT EXISTS idx_rows_site ON rows_(site_id);
 CREATE INDEX IF NOT EXISTS idx_rows_applied ON rows_(applied);
-CREATE INDEX IF NOT EXISTS idx_rows_structure ON rows_(structure_node_id);
 CREATE INDEX IF NOT EXISTS idx_structure_site ON structure_nodes(site_id);
 CREATE INDEX IF NOT EXISTS idx_structure_parent ON structure_nodes(parent_id);
 """
@@ -55,6 +54,14 @@ CREATE INDEX IF NOT EXISTS idx_structure_parent ON structure_nodes(parent_id);
 # её ещё нет — CREATE TABLE IF NOT EXISTS выше не трогает уже существующую таблицу rows_).
 MIGRATIONS = [
     "ALTER TABLE rows_ ADD COLUMN structure_node_id INTEGER REFERENCES structure_nodes(id)",
+]
+
+# Индексы, зависящие от колонок, добавляемых миграциями выше — создаются ПОСЛЕ
+# миграции, а не в SCHEMA: на БД, где rows_ уже существовала без structure_node_id,
+# CREATE TABLE IF NOT EXISTS её не добавляет, и CREATE INDEX на неё упал бы раньше,
+# чем отработает ALTER TABLE (именно так и случилось на проде — см. историю).
+POST_MIGRATION_INDEXES = [
+    "CREATE INDEX IF NOT EXISTS idx_rows_structure ON rows_(structure_node_id)",
 ]
 
 def get_conn():
@@ -73,5 +80,8 @@ def init_db():
         col = stmt.split("ADD COLUMN")[1].strip().split()[0]
         if col not in existing_cols:
             conn.execute(stmt)
+    conn.commit()
+    for stmt in POST_MIGRATION_INDEXES:
+        conn.execute(stmt)
     conn.commit()
     conn.close()
