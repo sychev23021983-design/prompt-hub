@@ -51,7 +51,10 @@ CREATE TABLE IF NOT EXISTS rows_ (
     date_applied TEXT,
     notes TEXT,
     structure_node_id INTEGER REFERENCES structure_nodes(id),  -- привязка к разделу структуры
-    page_type TEXT                   -- 'landing' | 'about' | 'trust' | 'faq' | 'service' | 'blog' | ... (выбирает шаблон промпта)
+    page_type TEXT,                  -- 'landing' | 'about' | 'trust' | 'faq' | 'service' | 'blog' | ... (выбирает шаблон промпта)
+    page_plan TEXT                   -- вставленный вручную результат этапа "Промпт: План" (интент, тип, подход,
+                                      -- структура, выбранные FAQ/ссылки, тон) — если заполнено, шаблон промпта
+                                      -- для текста следует плану вместо того, чтобы решать всё самостоятельно
 );
 
 CREATE INDEX IF NOT EXISTS idx_rows_site ON rows_(site_id);
@@ -67,6 +70,7 @@ CREATE INDEX IF NOT EXISTS idx_prompt_templates_site ON prompt_templates(site_id
 MIGRATIONS = [
     "ALTER TABLE rows_ ADD COLUMN structure_node_id INTEGER REFERENCES structure_nodes(id)",
     "ALTER TABLE rows_ ADD COLUMN page_type TEXT",
+    "ALTER TABLE rows_ ADD COLUMN page_plan TEXT",
 ]
 
 # Индексы, зависящие от колонок, добавляемых миграциями выше — создаются ПОСЛЕ

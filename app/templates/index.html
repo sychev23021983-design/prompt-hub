@@ -26,6 +26,11 @@
   button.prompt-btn:hover { background: #163a5a; }
   button.lsi-btn { background: #6a4e9a; }
   button.lsi-btn:hover { background: #543e7a; }
+  button.plan-btn { background: #a06a1f; }
+  button.plan-btn:hover { background: #7d5318; }
+  button.img-btn { background: #1f8a5f; }
+  button.img-btn:hover { background: #176b49; }
+  .plan-cell { min-width: 160px; max-width: 220px; font-size: 11px; color: #444; max-height: 80px; overflow-y: auto; }
   select.status-select { font-size: 12px; padding: 3px; }
   .editable { min-width: 160px; max-width: 260px; max-height: 90px; overflow-y: auto; outline: none; cursor: text; }
   .editable:hover { background: #fffbe6; }
@@ -101,6 +106,7 @@
   <th>Сайт</th><th>Раздел</th><th>Структура</th><th>Тип страницы</th><th>Название</th><th>URL</th><th>Тип</th>
   <th>SEO Title</th><th>H1</th><th>Meta Description</th>
   <th>Primary keyword</th><th>Secondary keywords</th><th>LSI keywords</th><th>FAQ</th>
+  <th>План страницы</th>
   <th>Notes</th><th>Статус</th><th>Действия</th>
 </tr>
 </thead>
@@ -141,6 +147,7 @@
   <td class="editable" contenteditable="true" data-row="{{ r.id }}" data-field="secondary_keywords">{{ r.secondary_keywords }}</td>
   <td class="editable" contenteditable="true" data-row="{{ r.id }}" data-field="lsi_keywords">{{ r.lsi_keywords }}</td>
   <td class="editable" contenteditable="true" data-row="{{ r.id }}" data-field="faq_questions">{{ r.faq_questions }}</td>
+  <td class="editable plan-cell" contenteditable="true" data-row="{{ r.id }}" data-field="page_plan" title="Вставьте сюда результат кнопки «1️⃣ План» — промпт для написания текста автоматически будет следовать этому плану">{{ r.page_plan }}</td>
   <td class="editable" contenteditable="true" data-row="{{ r.id }}" data-field="notes">{{ r.notes }}</td>
   <td>
     <form method="post" action="{{ url_for('mark_row', row_id=r.id) }}" style="display:inline">
@@ -152,7 +159,9 @@
     </form>
   </td>
   <td>
-    <button class="prompt-btn" onclick="showPrompt({{ r.id }})">Промпт</button>
+    <button class="prompt-btn plan-btn" onclick="showPlanPrompt({{ r.id }})" title="Шаг 1 (необязательный): спроектировать страницу — интент, тип, структуру">1️⃣ План</button>
+    <button class="prompt-btn" onclick="showPrompt({{ r.id }})" title="Шаг 2: написать текст страницы (следует плану, если он заполнен)">2️⃣ Текст</button>
+    <button class="prompt-btn img-btn" onclick="showImagePrompt({{ r.id }})" title="Шаг 3 (необязательный): только рекомендации по изображениям">3️⃣ Картинки</button>
     <button class="prompt-btn lsi-btn" onclick="showLsiPrompt({{ r.id }})" title="Сформировать промпт для подбора LSI-слов">🔤 LSI</button>
   </td>
 </tr>
@@ -184,6 +193,20 @@ async function showLsiPrompt(id) {
   const res = await fetch('/lsi-prompt/' + id);
   const data = await res.json();
   document.getElementById('modal-title').textContent = 'Промпт для подбора LSI-слов';
+  document.getElementById('prompt-text').value = data.prompt || data.error || '';
+  document.getElementById('modal-overlay').style.display = 'flex';
+}
+async function showPlanPrompt(id) {
+  const res = await fetch('/prompt/plan/' + id);
+  const data = await res.json();
+  document.getElementById('modal-title').textContent = 'Шаг 1: Промпт для проектирования страницы';
+  document.getElementById('prompt-text').value = data.prompt || data.error || '';
+  document.getElementById('modal-overlay').style.display = 'flex';
+}
+async function showImagePrompt(id) {
+  const res = await fetch('/prompt/images/' + id);
+  const data = await res.json();
+  document.getElementById('modal-title').textContent = 'Шаг 3: Промпт для рекомендаций по изображениям';
   document.getElementById('prompt-text').value = data.prompt || data.error || '';
   document.getElementById('modal-overlay').style.display = 'flex';
 }

@@ -5,7 +5,8 @@ from datetime import date
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 
 from db import get_conn, init_db
-from prompts import generate_prompt, get_related_rows, render_custom_template, build_lsi_prompt
+from prompts import (generate_prompt, get_related_rows, render_custom_template,
+                      build_lsi_prompt, build_planning_prompt, build_image_prompt)
 import structure
 import templates_store
 
@@ -129,9 +130,49 @@ def get_lsi_prompt(row_id):
     return jsonify({"prompt": text})
 
 
+@app.route("/prompt/plan/<int:row_id>")
+def get_plan_prompt(row_id):
+    """Этап 1 (необязательный) двухэтапной генерации: промпт для проектирования
+    страницы. Результат вставляется вручную в поле "План страницы"."""
+    conn = get_conn()
+    row = conn.execute("""SELECT r.*, s.prompt_style FROM rows_ r
+                           JOIN sites s ON s.id = r.site_id WHERE r.id=?""", (row_id,)).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+    related = get_related_rows(conn, row)
+    breadcrumb = None
+    if row["structure_node_id"]:
+        path = structure.node_path(conn, row["structure_node_id"])
+        breadcrumb = " / ".join(n["title"] for n in path)
+    conn.close()
+    text = build_planning_prompt(row, row["prompt_style"], related, breadcrumb)
+    return jsonify({"prompt": text})
+
+
+@app.route("/prompt/images/<int:row_id>")
+def get_image_prompt(row_id):
+    """Этап 3 (необязательный): отдельный промпт для рекомендаций по
+    изображениям — использует "План страницы", если он уже заполнен."""
+    conn = get_conn()
+    row = conn.execute("""SELECT r.*, s.prompt_style FROM rows_ r
+                           JOIN sites s ON s.id = r.site_id WHERE r.id=?""", (row_id,)).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+    breadcrumb = None
+    if row["structure_node_id"]:
+        path = structure.node_path(conn, row["structure_node_id"])
+        breadcrumb = " / ".join(n["title"] for n in path)
+    conn.close()
+    text = build_image_prompt(row, row["prompt_style"], breadcrumb)
+    return jsonify({"prompt": text})
+
+
 EDITABLE_FIELDS = {
     "name", "url", "seo_title", "h1", "meta_description", "primary_keyword",
     "secondary_keywords", "lsi_keywords", "faq_questions", "notes", "page_type",
+    "page_plan",
 }
 
 

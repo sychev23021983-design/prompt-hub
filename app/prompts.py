@@ -302,3 +302,22 @@ def build_lsi_prompt(row, prompt_style, breadcrumb=None):
     context = build_context(row, prompt_style, related_rows=None, breadcrumb=breadcrumb)
     template = _env.get_template("lsi_prompt.md.j2")
     return template.render(**context)
+
+
+def build_planning_prompt(row, prompt_style, related_rows=None, breadcrumb=None):
+    """Этап 1 (необязательный) двухэтапной генерации: промпт для проектирования
+    страницы — интент, тип, подход, структура, выбор FAQ/ссылок, тон — без
+    написания финального текста. Результат вставляется вручную в поле "План
+    страницы" (page_plan), после чего основной промпт (кнопка "Промпт")
+    автоматически следует этому плану вместо того, чтобы решать всё сам."""
+    context = build_context(row, prompt_style, related_rows, breadcrumb)
+    template = _env.get_template("planning_prompt.md.j2")
+    return template.render(**context)
+
+
+def build_image_prompt(row, prompt_style, breadcrumb=None):
+    """Этап 3 (необязательный): отдельный промпт только для рекомендаций по
+    изображениям — использует "План страницы", если он уже заполнен."""
+    context = build_context(row, prompt_style, related_rows=None, breadcrumb=breadcrumb)
+    template = _env.get_template("image_prompt.md.j2")
+    return template.render(**context)
