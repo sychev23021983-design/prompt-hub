@@ -240,6 +240,20 @@ def build_context(row, prompt_style, related_rows=None, breadcrumb=None):
     if row["notes"]:
         input_lines.append(_field("Дополнительные пожелания (заметки)", row["notes"]))
 
+    # Короткий список соседних страниц (не всё дерево структуры сайта — это
+    # раздувало бы промпт почти без пользы) с ДРУГОЙ рамкой, чем related_block:
+    # там те же страницы даны "для перелинковки", здесь — "чтобы не повторяться".
+    # Переиспользуем уже полученный related, отдельного похода в БД не делаем.
+    sibling_titles = [r["name"] for r in related[:6] if r["name"]]
+    sibling_note = None
+    if sibling_titles:
+        sibling_note = (
+            "Другие страницы рядом по теме (не для перелинковки, а для справки — "
+            "если тема пересекается, не повторяй те же формулировки и примеры, "
+            "что вероятно уже есть там): " + ", ".join(sibling_titles)
+        )
+        input_lines.append(sibling_note)
+
     related_block = _format_related(related, cfg)
 
     return dict(
@@ -251,6 +265,8 @@ def build_context(row, prompt_style, related_rows=None, breadcrumb=None):
         kind_goal=kind_goal,
         kind_avoid=kind_avoid,
         input_lines=input_lines,
+        sibling_titles=sibling_titles,
+        sibling_note=sibling_note,
         related=related,
         related_block=related_block,
         has_related=has_related,
