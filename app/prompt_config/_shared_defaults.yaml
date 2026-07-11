@@ -1,0 +1,12 @@
+# Значения по умолчанию для числовых параметров промпта.
+# Переопределяются в конфиге конкретного сайта, если нужно другое значение
+# (см. ключ `overrides` в commerce_en.yaml / b2b_ru.yaml / personal_ru.yaml).
+seo_title_max_chars: 60
+meta_description_chars: "140-160"
+body_word_count: "150-250"
+faq_count: "6-10"
+image_count: "2-3"
+related_links_count: "3-5"
+who_for_bullets: "3-5"
+why_us_bullets: "2-4"
+faq_answer_sentences: "2-4"
