@@ -198,7 +198,18 @@ def _page_kind(row, prompt_style):
             "не пиши общих рассуждений о теме — сразу к делу")
 
 
-def build_context(row, prompt_style, related_rows=None, breadcrumb=None):
+def _format_top_level(sections):
+    if not sections:
+        return "Разделов верхнего уровня в структуре сайта пока не задано."
+    lines = []
+    for s in sections:
+        label = s["name"] or s["title"]
+        url = s["url"] or "(URL ещё не опубликован)"
+        lines.append(f"- {label} — {url}")
+    return "\n".join(lines)
+
+
+def build_context(row, prompt_style, related_rows=None, breadcrumb=None, top_level_sections=None):
     """Собирает весь контекст для рендера промпта — общий как для дефолтного
     файлового шаблона (master_prompt.md.j2), так и для кастомных шаблонов типов
     страниц, сохранённых на вкладке "Промпт-шаблоны" (см. templates_store.py).
@@ -208,6 +219,9 @@ def build_context(row, prompt_style, related_rows=None, breadcrumb=None):
     extra = _extra(row)
     related = related_rows or []
     has_related = bool(related)
+    top_level_sections = top_level_sections or []
+    top_level_block = _format_top_level(top_level_sections)
+    has_top_level = bool(top_level_sections)
     kind_label, kind_goal, kind_avoid = _page_kind(row, prompt_style)
 
     input_lines = [
@@ -272,25 +286,29 @@ def build_context(row, prompt_style, related_rows=None, breadcrumb=None):
         has_related=has_related,
         has_faq=has_faq,
         breadcrumb=breadcrumb or "",
+        top_level_sections=top_level_sections,
+        top_level_block=top_level_block,
+        has_top_level=has_top_level,
     )
 
 
-def build_prompt(row, prompt_style, related_rows=None, breadcrumb=None):
-    context = build_context(row, prompt_style, related_rows, breadcrumb)
+def build_prompt(row, prompt_style, related_rows=None, breadcrumb=None, top_level_sections=None):
+    context = build_context(row, prompt_style, related_rows, breadcrumb, top_level_sections)
     template = _env.get_template("master_prompt.md.j2")
     return template.render(**context)
 
 
-def generate_prompt(row, prompt_style, related_rows=None, breadcrumb=None):
-    return build_prompt(row, prompt_style, related_rows, breadcrumb)
+def generate_prompt(row, prompt_style, related_rows=None, breadcrumb=None, top_level_sections=None):
+    return build_prompt(row, prompt_style, related_rows, breadcrumb, top_level_sections)
 
 
-def render_custom_template(template_text, row, prompt_style, related_rows=None, breadcrumb=None):
+def render_custom_template(template_text, row, prompt_style, related_rows=None, breadcrumb=None,
+                            top_level_sections=None):
     """Рендерит кастомный шаблон типа страницы (текст из prompt_templates в БД,
     вкладка "Промпт-шаблоны") с тем же контекстом, что и дефолтный шаблон —
     можно использовать и готовые {{ input_lines }}/{{ related_block }}, и
     напрямую поля строки: {{ row.name }}, {{ row.primary_keyword }} и т.д."""
-    context = build_context(row, prompt_style, related_rows, breadcrumb)
+    context = build_context(row, prompt_style, related_rows, breadcrumb, top_level_sections)
     template = _env.from_string(template_text)
     return template.render(**context)
 
@@ -304,13 +322,13 @@ def build_lsi_prompt(row, prompt_style, breadcrumb=None):
     return template.render(**context)
 
 
-def build_planning_prompt(row, prompt_style, related_rows=None, breadcrumb=None):
+def build_planning_prompt(row, prompt_style, related_rows=None, breadcrumb=None, top_level_sections=None):
     """Этап 1 (необязательный) двухэтапной генерации: промпт для проектирования
     страницы — интент, тип, подход, структура, выбор FAQ/ссылок, тон — без
     написания финального текста. Результат вставляется вручную в поле "План
     страницы" (page_plan), после чего основной промпт (кнопка "Промпт")
     автоматически следует этому плану вместо того, чтобы решать всё сам."""
-    context = build_context(row, prompt_style, related_rows, breadcrumb)
+    context = build_context(row, prompt_style, related_rows, breadcrumb, top_level_sections)
     template = _env.get_template("planning_prompt.md.j2")
     return template.render(**context)
 

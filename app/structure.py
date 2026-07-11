@@ -234,6 +234,30 @@ def get_breadcrumbs(conn, site_id):
     return {n["id"]: crumb(n["id"]) for n in nodes}
 
 
+def get_top_level_sections(conn, site_id):
+    """Список корневых разделов дерева структуры сайта с реальными ссылками
+    (если на раздел уже привязана страница) — для лендинга/главной страницы,
+    где нужен обзор всего сайта, а не только соседей текущей страницы (в
+    отличие от related_rows, которые ищут по structure_node_id/vendor/geo
+    вокруг конкретной страницы)."""
+    roots = conn.execute(
+        "SELECT * FROM structure_nodes WHERE site_id=? AND parent_id IS NULL ORDER BY path_order",
+        (site_id,)
+    ).fetchall()
+    result = []
+    for n in roots:
+        page = conn.execute(
+            "SELECT name, url FROM rows_ WHERE structure_node_id=? LIMIT 1",
+            (n["id"],)
+        ).fetchone()
+        result.append({
+            "title": n["title"],
+            "name": page["name"] if page else n["title"],
+            "url": (page["url"] if page and page["url"] else None),
+        })
+    return result
+
+
 def node_path(conn, node_id):
     """Список узлов от корня до node_id включительно."""
     path = []
