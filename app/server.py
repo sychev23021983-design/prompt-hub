@@ -5,7 +5,7 @@ from datetime import date
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 
 from db import get_conn, init_db
-from prompts import generate_prompt, get_related_rows, render_custom_template
+from prompts import generate_prompt, get_related_rows, render_custom_template, build_lsi_prompt
 import structure
 import templates_store
 
@@ -108,6 +108,25 @@ def get_prompt(row_id):
         text = generate_prompt(row, row["prompt_style"], related, breadcrumb)
         source = "default"
     return jsonify({"prompt": text, "template_source": source})
+
+
+@app.route("/lsi-prompt/<int:row_id>")
+def get_lsi_prompt(row_id):
+    """Небольшой самостоятельный промпт для генерации LSI-слов — копируется в
+    ChatGPT/Claude, результат вставляется вручную в поле LSI keywords."""
+    conn = get_conn()
+    row = conn.execute("""SELECT r.*, s.prompt_style FROM rows_ r
+                           JOIN sites s ON s.id = r.site_id WHERE r.id=?""", (row_id,)).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+    breadcrumb = None
+    if row["structure_node_id"]:
+        path = structure.node_path(conn, row["structure_node_id"])
+        breadcrumb = " / ".join(n["title"] for n in path)
+    conn.close()
+    text = build_lsi_prompt(row, row["prompt_style"], breadcrumb)
+    return jsonify({"prompt": text})
 
 
 EDITABLE_FIELDS = {

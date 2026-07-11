@@ -277,3 +277,12 @@ def render_custom_template(template_text, row, prompt_style, related_rows=None, 
     context = build_context(row, prompt_style, related_rows, breadcrumb)
     template = _env.from_string(template_text)
     return template.render(**context)
+
+
+def build_lsi_prompt(row, prompt_style, breadcrumb=None):
+    """Небольшой самостоятельный промпт «дай мне LSI-слова для этой страницы» —
+    для копирования в ChatGPT/Claude и вставки результата обратно в поле LSI
+    keywords вручную (кнопка "🔤 LSI" в основной таблице)."""
+    context = build_context(row, prompt_style, related_rows=None, breadcrumb=breadcrumb)
+    template = _env.get_template("lsi_prompt.md.j2")
+    return template.render(**context)

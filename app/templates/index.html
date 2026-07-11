@@ -22,8 +22,10 @@
   .badge-commerce_en { background: #dbe8fb; color: #1a4a8a; }
   .badge-b2b_ru { background: #f8e3d3; color: #8a4a1a; }
   .badge-personal_ru { background: #f3d9e6; color: #8a1a55; }
-  button.prompt-btn { background: #1F4E78; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+  button.prompt-btn { background: #1F4E78; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; white-space: nowrap; margin-bottom: 4px; }
   button.prompt-btn:hover { background: #163a5a; }
+  button.lsi-btn { background: #6a4e9a; }
+  button.lsi-btn:hover { background: #543e7a; }
   select.status-select { font-size: 12px; padding: 3px; }
   .editable { min-width: 160px; max-width: 260px; max-height: 90px; overflow-y: auto; outline: none; cursor: text; }
   .editable:hover { background: #fffbe6; }
@@ -149,7 +151,10 @@
       </select>
     </form>
   </td>
-  <td><button class="prompt-btn" onclick="showPrompt({{ r.id }})">Промпт</button></td>
+  <td>
+    <button class="prompt-btn" onclick="showPrompt({{ r.id }})">Промпт</button>
+    <button class="prompt-btn lsi-btn" onclick="showLsiPrompt({{ r.id }})" title="Сформировать промпт для подбора LSI-слов">🔤 LSI</button>
+  </td>
 </tr>
 {% endfor %}
 </tbody>
@@ -158,7 +163,7 @@
 
 <div id="modal-overlay">
   <div id="modal">
-    <h3 style="margin-top:0">Промпт для LLM</h3>
+    <h3 style="margin-top:0" id="modal-title">Промпт для LLM</h3>
     <textarea id="prompt-text" readonly></textarea>
     <div class="modal-actions">
       <button id="copy-btn" onclick="copyPrompt()">Скопировать</button>
@@ -171,6 +176,14 @@
 async function showPrompt(id) {
   const res = await fetch('/prompt/' + id);
   const data = await res.json();
+  document.getElementById('modal-title').textContent = 'Промпт для LLM';
+  document.getElementById('prompt-text').value = data.prompt || data.error || '';
+  document.getElementById('modal-overlay').style.display = 'flex';
+}
+async function showLsiPrompt(id) {
+  const res = await fetch('/lsi-prompt/' + id);
+  const data = await res.json();
+  document.getElementById('modal-title').textContent = 'Промпт для подбора LSI-слов';
   document.getElementById('prompt-text').value = data.prompt || data.error || '';
   document.getElementById('modal-overlay').style.display = 'flex';
 }
