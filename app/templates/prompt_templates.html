@@ -77,7 +77,8 @@
       {% set t = existing_map.get(key) %}
       <td>
         <button class="cell-btn {% if t %}has-template{% endif %}"
-                onclick="openEditor({{ s.id }}, '{{ code }}', {{ s.name|tojson }}, {{ label|tojson }})">
+                data-site-id="{{ s.id }}" data-page-type="{{ code }}"
+                data-site-name="{{ s.name }}" data-page-label="{{ label }}">
           {% if t %}✎ Изменить{% else %}+ Создать{% endif %}
         </button>
         {% if t %}<div class="updated">обновлён {{ t.updated_at }}</div>{% endif %}
@@ -107,6 +108,17 @@
 <script>
 const EXISTING = {{ existing_map | tojson }};
 let current = {siteId: null, pageType: null};
+
+document.querySelectorAll('.cell-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    openEditor(
+      parseInt(btn.dataset.siteId, 10),
+      btn.dataset.pageType,
+      btn.dataset.siteName,
+      btn.dataset.pageLabel
+    );
+  });
+});
 
 function openEditor(siteId, pageType, siteName, pageLabel) {
   current = {siteId, pageType};
