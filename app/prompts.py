@@ -74,6 +74,16 @@ def _extra(row):
         return {}
 
 
+def _field(label, value):
+    """Формирует строку 'Label: значение' с явной пометкой «нет данных», если
+    поле пустое — вместо того чтобы молча пропускать поле (модель начинала
+    додумывать за него) или печатать буквальное 'None' из пустого значения БД."""
+    val = (value or "").strip() if isinstance(value, str) else value
+    if not val:
+        return f"{label}: нет данных"
+    return f"{label}: {val}"
+
+
 def get_related_rows(conn, row, limit=6):
     """Ищет реальные связанные строки того же сайта. Приоритет источников:
     1) структура сайта, если страница к ней привязана — другие страницы того же
@@ -192,11 +202,12 @@ def build_prompt(row, prompt_style, related_rows=None, breadcrumb=None):
     cfg = _get_site_config(prompt_style)
     extra = _extra(row)
     related = related_rows or []
+    has_related = bool(related)
     kind_label, kind_goal, kind_avoid = _page_kind(row, prompt_style)
 
     input_lines = [
-        f"Название: {row['name']}",
-        f"Раздел/тип: {row['row_type']}",
+        _field("Название", row["name"]),
+        _field("Раздел/тип", row["row_type"]),
         f"URL: {row['url'] or '(ещё не опубликован)'}",
     ]
     if breadcrumb:
@@ -208,20 +219,21 @@ def build_prompt(row, prompt_style, related_rows=None, breadcrumb=None):
     if extra.get("section"):
         input_lines.append(f"Раздел сайта: {extra['section']}")
     input_lines += [
-        f"SEO Title (черновой): {row['seo_title']}",
-        f"H1 (черновой): {row['h1']}",
-        f"Meta Description (черновой): {row['meta_description']}",
-        f"Основной запрос: {row['primary_keyword']}",
-        f"Дополнительные запросы: {row['secondary_keywords']}",
+        _field("SEO Title (черновой)", row["seo_title"]),
+        _field("H1 (черновой)", row["h1"]),
+        _field("Meta Description (черновой)", row["meta_description"]),
+        _field("Основной запрос", row["primary_keyword"]),
+        _field("Дополнительные запросы", row["secondary_keywords"]),
+        _field("LSI-слова (вплетай в текст, не перечисляй списком)", row["lsi_keywords"]),
     ]
-    if row["lsi_keywords"]:
-        input_lines.append(f"LSI-слова (вплетай в текст, не перечисляй списком): {row['lsi_keywords']}")
 
     has_faq = bool(row["faq_questions"])
-    if has_faq:
-        input_lines.append(
-            f"Возможные вопросы для FAQ (выбери самые релевантные, не обязательно все): {row['faq_questions']}"
-        )
+    input_lines.append(_field(
+        "Возможные вопросы для FAQ (выбери самые релевантные, не обязательно все)",
+        row["faq_questions"]
+    ))
+    if row["notes"]:
+        input_lines.append(_field("Дополнительные пожелания (заметки)", row["notes"]))
 
     related_block = _format_related(related, cfg)
 
@@ -235,6 +247,7 @@ def build_prompt(row, prompt_style, related_rows=None, breadcrumb=None):
         kind_avoid=kind_avoid,
         input_lines=input_lines,
         related_block=related_block,
+        has_related=has_related,
         has_faq=has_faq,
     )
 

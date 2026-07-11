@@ -37,11 +37,6 @@ no_invent_fallback: >
   use neutral phrasing like "high-resolution elevation data" or
   "ready for standard 3D printers" instead of inventing numbers
 local_seo: null
-schema_type: "Product"
-schema_extra:
-  - "brand"
-  - "offers (priceCurrency, availability)"
-  - "sku (if a slug/id exists)"
 why_us_label: "Why buy from us"
 why_us_hint: "delivery format, instant download, compatible software/printers, support"
 process_block: null
@@ -52,6 +47,15 @@ link_none_note: >
   kind of pages that SHOULD exist (e.g. "link to the parent category
   page") without inventing specific fake URLs.
 delivery_line: "поставка, настройка и гарантия от the shop"
+
+# Подходы к подаче страницы (v1.1) — модель выбирает ОДИН перед генерацией и не
+# использует один и тот же подход для всех страниц подряд. Заменяет расплывчатую
+# метафору "представь, что пишешь 30 страниц" на конкретный выбор.
+page_angles:
+  - "через практическую задачу: что можно напечатать/вырезать этим файлом и зачем"
+  - "через технические характеристики файла и совместимость"
+  - "через сценарий использования (3D-печать / визуализация / ЧПУ / ГИС)"
+  - "через сравнение форматов и когда какой выбрать"
 
 # Переопределения числовых лимитов из _shared_defaults.yaml (если нужно другое значение
 # конкретно для этого сайта) — сейчас пусто, используются общие значения.
